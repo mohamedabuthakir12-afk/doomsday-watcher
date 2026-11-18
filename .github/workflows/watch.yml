@@ -1,0 +1,42 @@
+name: Doomsday ticket watcher
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # keeps a run queued so the watch never stops
+  workflow_dispatch:          # "Run workflow" button to start it now
+
+# Only one watcher at a time; the next scheduled run waits and takes over.
+concurrency:
+  group: doomsday-watcher
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore list of shows already seen
+        uses: actions/cache/restore@v4
+        with:
+          path: doomsday_state.json
+          key: doomsday-state-${{ github.run_id }}
+          restore-keys: doomsday-state-
+
+      - name: Check BookMyShow + District every minute (about 5h 40m)
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          MAX_RUNTIME: "20400"
+        run: python -u doomsday_watch.py 60
+
+      - name: Save list of shows already seen
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: doomsday_state.json
+          key: doomsday-state-${{ github.run_id }}
